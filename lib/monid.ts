@@ -159,8 +159,8 @@ function isAuthoredBy(record: Record<string, unknown>, profile: Profile) {
   return !authorSlug || !profileSlug || authorSlug === profileSlug;
 }
 
-function publishedAt(record: Record<string, unknown>, fallback: string) {
-  const value = text(record, ["posted", "posted_at", "postedAtISO", "publishedAt", "createdAt", "date"], fallback);
+function publishedAt(record: Record<string, unknown>, fallback: string, keys = ["posted", "posted_at", "postedAtISO", "publishedAt", "createdAt", "date"]) {
+  const value = text(record, keys, fallback);
   const normalized = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(value)
     ? `${value.replace(" ", "T")}Z`
     : value;
@@ -179,19 +179,28 @@ export async function fetchPosts(profiles: Profile[]): Promise<LinkedInPost[]> {
       queryParams: { url: profile.linkedinUrl, type: "posts", start: 0 },
     });
     const normalized = outputItems(output).flatMap((record, index) => {
-      if (record.reshared === true || !isAuthoredBy(record, profile)) return [];
-      const profileId = postProfileId(record, profiles, profile.id) || profile.id;
-      const engagement = record.engagement && typeof record.engagement === "object"
+      const resharerComment = text(record, ["resharer_comment", "resharerComment"]).trim();
+      const isCommentedReshare = record.reshared === true && Boolean(resharerComment);
+      if ((record.reshared === true && !isCommentedReshare) || (!isCommentedReshare && !isAuthoredBy(record, profile))) return [];
+      const profileId = isCommentedReshare ? profile.id : postProfileId(record, profiles, profile.id) || profile.id;
+      const repostStats = record.repost_stats && typeof record.repost_stats === "object"
+        ? record.repost_stats as Record<string, unknown>
+        : undefined;
+      const engagement = isCommentedReshare && repostStats
+        ? repostStats
+        : record.engagement && typeof record.engagement === "object"
         ? (record.engagement as Record<string, unknown>)
         : record;
-      const publishedDate = publishedAt(record, fetchedAt);
+      const publishedDate = publishedAt(record, fetchedAt, isCommentedReshare ? ["reposted"] : undefined);
       if (+new Date(publishedDate) < cutoff) return [];
-      const id = text(record, ["urn", "id", "postId", "activityId"], `${profileId}-${publishedDate}-${index}`);
+      const id = text(record, isCommentedReshare ? ["repost_urn", "repostUrn"] : ["urn", "id", "postId", "activityId"], `${profileId}-${publishedDate}-${index}`);
       return [{
         id,
         profileId,
-        url: text(record, ["post_url", "url", "postUrl", "shareUrl"], "#"),
-        text: text(record, ["content", "text", "commentary"], "LinkedIn post"),
+        url: isCommentedReshare && id
+          ? `https://www.linkedin.com/feed/update/urn:li:activity:${id}/`
+          : text(record, ["post_url", "url", "postUrl", "shareUrl"], "#"),
+        text: isCommentedReshare ? resharerComment : text(record, ["content", "text", "commentary"], "LinkedIn post"),
         publishedAt: publishedDate,
         reactions: number(engagement, ["num_reactions", "total_reactions", "reactions", "numLikes", "likes", "reactionCount"]),
         comments: number(engagement, ["num_comments", "comments", "numComments", "commentCount"]),

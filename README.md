@@ -8,6 +8,7 @@ A local-only dashboard for saving one weekly winning post from each tracked Link
 - Stores weekly follower snapshots so growth can be measured over 7, 30, or 90 days.
 - Ranks your growth rate against tracked peers.
 - Selects the highest weighted-engagement post published by each person in the last seven days.
+- Tracks a repost with added thoughts as the person's post, while ignoring plain reposts.
 - Compares posting cadence and weighted engagement.
 - Exports a 90-day benchmark as CSV.
 

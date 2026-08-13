@@ -105,7 +105,7 @@ describe("Monid LinkedIn normalization", () => {
     await expect(fetchPosts([profile])).resolves.toEqual([]);
   });
 
-  it("excludes reshared activity even when the tracked profile is the poster", async () => {
+  it("excludes plain reshared activity without added thoughts", async () => {
     completed({ data: [{
       urn: "reshare-1",
       post_url: "https://www.linkedin.com/feed/update/reshare-1",
@@ -117,5 +117,35 @@ describe("Monid LinkedIn normalization", () => {
     }] });
 
     await expect(fetchPosts([profile])).resolves.toEqual([]);
+  });
+
+  it("tracks a repost with thoughts as the tracked person's wrapper post", async () => {
+    completed({ data: [{
+      urn: "original-post",
+      post_url: "https://www.linkedin.com/feed/update/urn:li:activity:original-post/",
+      posted: "2026-08-10 17:55:38",
+      poster_linkedin_url: "https://www.linkedin.com/in/original-author",
+      reshared: true,
+      repost_urn: "tracked-repost",
+      reposted: "2026-08-11 19:09:31",
+      resharer_comment: "My own thoughts on this post",
+      text: "The original author's post",
+      num_reactions: 500,
+      repost_stats: { num_reactions: 4, num_comments: 2, num_reposts: 1 },
+    }] });
+
+    const posts = await fetchPosts([profile]);
+
+    expect(posts).toHaveLength(1);
+    expect(posts[0]).toMatchObject({
+      id: "tracked-repost",
+      profileId: profile.id,
+      url: "https://www.linkedin.com/feed/update/urn:li:activity:tracked-repost/",
+      text: "My own thoughts on this post",
+      publishedAt: "2026-08-11T19:09:31.000Z",
+      reactions: 4,
+      comments: 2,
+      reposts: 1,
+    });
   });
 });
