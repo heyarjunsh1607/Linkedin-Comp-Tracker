@@ -44,7 +44,8 @@ export async function updateStore(mutator: (store: TrackerStore) => TrackerStore
     if (usesBlobStore()) {
       for (let attempt = 0; attempt < 4; attempt += 1) {
         const current = await readBlobStore();
-        const next = mutator(structuredClone(current.store)) || current.store;
+        const draft = structuredClone(current.store);
+        const next = mutator(draft) || draft;
         try {
           await put(BLOB_PATH, JSON.stringify(next), {
             access: "private",
@@ -63,7 +64,8 @@ export async function updateStore(mutator: (store: TrackerStore) => TrackerStore
     }
 
     const store = await ensureLocalStore();
-    result = mutator(structuredClone(store)) || store;
+    const draft = structuredClone(store);
+    result = mutator(draft) || draft;
     const temp = `${DATA_FILE}.tmp`;
     await fs.writeFile(temp, JSON.stringify(result, null, 2));
     await fs.rename(temp, DATA_FILE);
@@ -104,9 +106,16 @@ function applyRefresh(store: TrackerStore, { profile, snapshot, posts }: Refresh
     );
     store.snapshots.push(snapshot);
     const incoming = new Map(posts.map((post) => [post.id, post]));
-    store.posts = store.posts.map((post) => incoming.get(post.id) || post);
+    store.posts = [...new Map(
+      store.posts.map((post) => incoming.get(post.id) || post).map((post) => [post.id, post]),
+    ).values()];
     const known = new Set(store.posts.map((post) => post.id));
-    store.posts.push(...posts.filter((post) => !known.has(post.id)));
+    for (const post of incoming.values()) {
+      if (!known.has(post.id)) {
+        store.posts.push(post);
+        known.add(post.id);
+      }
+    }
     store.seededDemo = false;
 }
 

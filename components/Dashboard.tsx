@@ -39,7 +39,7 @@ function signed(value: number, suffix = "") {
 }
 
 function engagement(post: LinkedInPost) {
-  return post.reactions + post.comments + post.reposts;
+  return post.reactions + post.comments * 2 + post.reposts * 3;
 }
 
 function MediaIcon({ type }: { type: LinkedInPost["mediaType"] }) {
@@ -85,7 +85,12 @@ export function Dashboard() {
       const response = await fetch("/api/refresh", { method: "POST" });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || result.errors?.[0]?.error || "Refresh failed.");
-      setNotice(`Updated ${result.refreshedProfiles} profiles and ${result.fetchedPosts} posts.`);
+      const summary = `Updated ${result.refreshedProfiles} profiles and ${result.fetchedPosts} posts.`;
+      if (result.errors?.length) {
+        setError(`${summary} ${result.errors.map((item: { profile: string; error: string }) => `${item.profile}: ${item.error}`).join(" ")}`);
+      } else {
+        setNotice(summary);
+      }
       await load();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Refresh failed.");
@@ -152,7 +157,7 @@ export function Dashboard() {
             </div>
           </section>
 
-          {(error || notice) && <div className={`toast ${error ? "toast-error" : "toast-success"}`}>{error || notice}<button onClick={() => { setError(""); setNotice(""); }}><X size={15} /></button></div>}
+          {(error || notice) && <div className={`toast ${error ? "toast-error" : "toast-success"}`} role="status" aria-live="polite">{error || notice}<button aria-label="Dismiss message" onClick={() => { setError(""); setNotice(""); }}><X size={15} /></button></div>}
           {data?.isDemo && <div className="demo-banner"><span><Sparkles size={17} /></span><div><strong>You’re viewing a realistic demo.</strong><p>Add your profiles and connect Monid to replace it with live LinkedIn data.</p></div><button onClick={() => setModal(true)}>Add your profile <ArrowUpRight size={15} /></button></div>}
 
           {loading && !data ? <LoadingState /> : data && (
@@ -180,7 +185,7 @@ export function Dashboard() {
                 </div>
                 <div className="table-scroll">
                   <table>
-                    <thead><tr><th>Rank</th><th>Profile</th><th>Followers</th><th>Growth</th><th>Posts</th><th>Avg. engagement</th><th /></tr></thead>
+                    <thead><tr><th scope="col">Rank</th><th scope="col">Profile</th><th scope="col">Followers</th><th scope="col">Growth</th><th scope="col">Posts</th><th scope="col">Avg. engagement</th><th scope="col"><span className="sr-only">Actions</span></th></tr></thead>
                     <tbody>{sorted.map((profile) => (
                       <tr key={profile.id} className={profile.isSelf ? "self-row" : ""}>
                         <td><span className={`rank rank-${profile.rank}`}>{profile.rank}</span></td>
@@ -202,7 +207,7 @@ export function Dashboard() {
                   <article className="post-card" key={post.id}>
                     <div className="post-top"><div className="person-cell"><Avatar profile={post.author} size="sm" /><div><strong>{post.author.name}</strong><span>{new Date(post.publishedAt).toLocaleDateString("en", { month: "short", day: "numeric" })}</span></div></div><span className="post-rank">#{index + 1}</span></div>
                     <p className="post-copy">{post.text}</p>
-                    <div className="post-footer"><span><MediaIcon type={post.mediaType} />{post.mediaType}</span><span><ArrowUpRight size={15} />{format.format(post.reactions)}</span><span><MessageCircle size={15} />{format.format(post.comments)}</span><a href={post.url} target="_blank" rel="noreferrer"><ExternalLink size={15} /></a></div>
+                    <div className="post-footer"><span><MediaIcon type={post.mediaType} />{post.mediaType}</span><span><ArrowUpRight size={15} />{format.format(post.reactions)}</span><span><MessageCircle size={15} />{format.format(post.comments)}</span><a href={post.url} target="_blank" rel="noreferrer" aria-label={`Open ${post.author.name}'s post on LinkedIn`}><ExternalLink size={15} /></a></div>
                     <div className="post-score"><i style={{ width: `${Math.max(8, Math.min(100, (engagement(post) / Math.max(...data.topPosts.map(engagement))) * 100))}%` }} /></div>
                   </article>
                 ))}</div>
@@ -243,5 +248,5 @@ function AddProfileModal({ onClose, onSaved }: { onClose: () => void; onSaved: (
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not add profile."); setSaving(false); }
   }
 
-  return <div className="modal-layer" role="dialog" aria-modal="true" aria-labelledby="modal-title"><button className="modal-backdrop" onClick={onClose} aria-label="Close" /><form className="modal" onSubmit={submit}><div className="modal-header"><div><span className="modal-icon"><Plus /></span><div><h2 id="modal-title">Track a LinkedIn profile</h2><p>Add yourself first, then the people who set the benchmark.</p></div></div><button type="button" onClick={onClose}><X /></button></div>{error && <p className="form-error">{error}</p>}<label>Name<input required minLength={2} placeholder="e.g. Arjun Sharma" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></label><label>LinkedIn profile URL<input required type="url" placeholder="https://linkedin.com/in/username" value={form.linkedinUrl} onChange={(e) => setForm({ ...form, linkedinUrl: e.target.value })} /></label><label>Headline <span>optional</span><input placeholder="Founder, writer, marketer…" value={form.headline} onChange={(e) => setForm({ ...form, headline: e.target.value })} /></label><label className="checkbox"><input type="checkbox" checked={form.isSelf} onChange={(e) => setForm({ ...form, isSelf: e.target.checked })} /><span><b>This is my profile</b><small>Marks this person as “You” in benchmarks.</small></span></label><div className="modal-actions"><button type="button" className="button secondary" onClick={onClose}>Cancel</button><button className="button primary" disabled={saving}>{saving ? <LoaderCircle className="spin" size={16} /> : <Plus size={16} />}{saving ? "Adding" : "Add profile"}</button></div></form></div>;
+  return <div className="modal-layer" role="dialog" aria-modal="true" aria-labelledby="modal-title"><button className="modal-backdrop" onClick={onClose} aria-label="Close dialog" /><form className="modal" onSubmit={submit}><div className="modal-header"><div><span className="modal-icon"><Plus /></span><div><h2 id="modal-title">Track a LinkedIn profile</h2><p>Add yourself first, then the people who set the benchmark.</p></div></div><button type="button" onClick={onClose} aria-label="Close dialog"><X /></button></div>{error && <p className="form-error">{error}</p>}<label>Name<input required minLength={2} placeholder="e.g. Arjun Sharma" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></label><label>LinkedIn profile URL<input required type="url" placeholder="https://linkedin.com/in/username" value={form.linkedinUrl} onChange={(e) => setForm({ ...form, linkedinUrl: e.target.value })} /></label><label>Headline <span>optional</span><input placeholder="Founder, writer, marketer…" value={form.headline} onChange={(e) => setForm({ ...form, headline: e.target.value })} /></label><label className="checkbox"><input type="checkbox" checked={form.isSelf} onChange={(e) => setForm({ ...form, isSelf: e.target.checked })} /><span><b>This is my profile</b><small>Marks this person as “You” in benchmarks.</small></span></label><div className="modal-actions"><button type="button" className="button secondary" onClick={onClose}>Cancel</button><button className="button primary" disabled={saving}>{saving ? <LoaderCircle className="spin" size={16} /> : <Plus size={16} />}{saving ? "Adding" : "Add profile"}</button></div></form></div>;
 }

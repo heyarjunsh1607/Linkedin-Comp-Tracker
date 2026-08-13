@@ -6,7 +6,7 @@ const POLL_TIMEOUT = 120_000;
 
 type MonidRun = {
   runId: string;
-  status: "READY" | "RUNNING" | "COMPLETED" | "FAILED";
+  status: "READY" | "RUNNING" | "COMPLETED" | "FAILED" | "BLOCKED" | "STOPPED" | "TIME_OUT";
   output?: unknown;
   providerResponse?: { httpStatus?: number; error?: unknown };
 };
@@ -50,7 +50,9 @@ async function run(provider: string, endpoint: string, input: Record<string, unk
 }
 
 function checkResult(result: MonidRun) {
-  if (result.status === "FAILED") throw new Error(`Monid run ${result.runId} failed.`);
+  if (result.status !== "COMPLETED") {
+    throw new Error(`Monid run ${result.runId} ended with status ${result.status}.`);
+  }
   const status = result.providerResponse?.httpStatus || 200;
   if (status >= 400) throw new Error(`Monid provider returned HTTP ${status}.`);
   return result.output;
@@ -111,7 +113,7 @@ export async function fetchProfile(profile: Profile): Promise<{ profile: Profile
     profile: {
       ...profile,
       name: text(data, ["full_name", "fullName", "name"], profile.name),
-      headline: text(data, ["headline", "occupation", "title"], profile.headline),
+      headline: text(data, ["headline", "occupation", "position", "title"], profile.headline),
       avatarUrl: text(data, ["profile_picture", "profilePicture", "avatar", "avatarUrl", "photo"], profile.avatarUrl),
       lastRefreshedAt: now,
     },
@@ -135,15 +137,24 @@ function mediaType(record: Record<string, unknown>): LinkedInPost["mediaType"] {
 }
 
 function postProfileId(record: Record<string, unknown>, profiles: Profile[], fallbackProfileId?: string) {
-  const url = text(record, ["authorProfileUrl", "authorLinkedInUrl", "profileUrl", "linkedinUrl"]);
+  const url = text(record, ["poster_linkedin_url", "authorProfileUrl", "authorLinkedInUrl", "profileUrl", "linkedinUrl"]);
   const slug = url.match(/linkedin\.com\/in\/([^/?#]+)/i)?.[1]?.toLowerCase();
   if (slug) return profiles.find((profile) => profile.linkedinUrl.toLowerCase().includes(`/in/${slug}`))?.id;
-  const author = record.author;
+  const author = record.author || record.poster;
   if (author && typeof author === "object") {
     return postProfileId(author as Record<string, unknown>, profiles, fallbackProfileId);
   }
   const name = text(record, ["authorFullName", "authorName", "name"]).toLowerCase();
   return profiles.find((profile) => profile.name.toLowerCase() === name)?.id || fallbackProfileId;
+}
+
+function publishedAt(record: Record<string, unknown>, fallback: string) {
+  const value = text(record, ["posted", "posted_at", "postedAtISO", "publishedAt", "createdAt", "date"], fallback);
+  const normalized = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(value)
+    ? `${value.replace(" ", "T")}Z`
+    : value;
+  const parsed = new Date(normalized);
+  return Number.isNaN(+parsed) ? fallback : parsed.toISOString();
 }
 
 export async function fetchPosts(profiles: Profile[]): Promise<LinkedInPost[]> {
@@ -156,28 +167,28 @@ export async function fetchPosts(profiles: Profile[]): Promise<LinkedInPost[]> {
     const output = await run(provider, endpoint, {
       queryParams: { url: profile.linkedinUrl, type: "posts", start: 0 },
     });
-    return outputItems(output).flatMap((record, index) => {
+    const normalized = outputItems(output).flatMap((record, index) => {
       const profileId = postProfileId(record, profiles, profile.id) || profile.id;
       const engagement = record.engagement && typeof record.engagement === "object"
         ? (record.engagement as Record<string, unknown>)
         : record;
-      const publishedAt = text(record, ["posted_at", "postedAtISO", "publishedAt", "createdAt", "date"], fetchedAt);
-      const publishedDate = Number.isNaN(+new Date(publishedAt)) ? fetchedAt : new Date(publishedAt).toISOString();
+      const publishedDate = publishedAt(record, fetchedAt);
       if (+new Date(publishedDate) < cutoff) return [];
       const id = text(record, ["urn", "id", "postId", "activityId"], `${profileId}-${publishedDate}-${index}`);
       return [{
         id,
         profileId,
-        url: text(record, ["url", "postUrl", "shareUrl"], "#"),
+        url: text(record, ["post_url", "url", "postUrl", "shareUrl"], "#"),
         text: text(record, ["content", "text", "commentary"], "LinkedIn post"),
         publishedAt: publishedDate,
-        reactions: number(engagement, ["total_reactions", "reactions", "numLikes", "likes", "reactionCount"]),
-        comments: number(engagement, ["comments", "numComments", "commentCount"]),
-        reposts: number(engagement, ["shares", "reposts", "numShares", "shareCount"]),
+        reactions: number(engagement, ["num_reactions", "total_reactions", "reactions", "numLikes", "likes", "reactionCount"]),
+        comments: number(engagement, ["num_comments", "comments", "numComments", "commentCount"]),
+        reposts: number(engagement, ["num_reposts", "shares", "reposts", "numShares", "shareCount"]),
         mediaType: mediaType(record),
         fetchedAt,
       } satisfies LinkedInPost];
-    }).slice(0, 15);
+    });
+    return [...new Map(normalized.map((post) => [post.id, post])).values()].slice(0, 15);
   }));
   return perProfile.flat();
 }
