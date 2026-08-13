@@ -24,7 +24,7 @@ describe("scheduled refresh route", () => {
   it("runs the refresh directly after cron authentication", async () => {
     process.env.CRON_SECRET = "cron-test-secret";
     refreshTrackedProfiles.mockResolvedValue({
-      body: { ok: true, refreshedProfiles: 2, fetchedPosts: 27, errors: [] },
+      body: { ok: true, refreshedProfiles: 2, fetchedPosts: 27, errors: [], totalProfiles: 2, nextCursor: null, done: true },
       status: 200,
     });
     const { GET } = await import("@/app/api/cron/refresh/route");

@@ -54,9 +54,11 @@ export type DashboardData = {
   generatedAt: string;
   isDemo: boolean;
   hasMonidKey: boolean;
+  storageMode: "blob" | "local" | "unconfigured";
   lastRefreshedAt?: string;
   profiles: DashboardProfile[];
-  topPosts: Array<LinkedInPost & { author: Profile; engagement: number }>;
+  topPosts: ScoredPost[];
+  weeklyWinners: Array<{ profile: Profile; post?: ScoredPost }>;
   summary: {
     selfGrowth: number;
     selfGrowthPercent: number;
@@ -64,5 +66,8 @@ export type DashboardData = {
     selfPosts: number;
     selfRank: number;
     totalProfiles: number;
+    weeklyWinnerCount: number;
   };
 };
+
+export type ScoredPost = LinkedInPost & { author: Profile; engagement: number };

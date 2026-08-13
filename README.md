@@ -1,16 +1,15 @@
-# Pulseboard — LinkedIn competitor tracker
+# LinkedIn Watchlist MVP
 
-A local-first dashboard for comparing your LinkedIn follower growth, posting cadence, and top-performing posts against a list of peers. LinkedIn data is fetched through Monid; this app never needs your LinkedIn login or cookies.
+A small dashboard for saving one weekly winning post from each tracked LinkedIn profile and comparing audience growth and posting consistency. LinkedIn data is fetched through Monid; this app never needs your LinkedIn login or cookies.
 
 ## What it does
 
-- Stores daily follower snapshots so growth can be measured over 7, 30, or 90 days.
+- Starts with Arjun plus the 13-person watchlist in `lib/watchlist.ts`.
+- Stores weekly follower snapshots so growth can be measured over 7, 30, or 90 days.
 - Ranks your growth rate against tracked peers.
-- Compares posting cadence and weighted post engagement.
-- Surfaces the highest-performing peer posts for inspiration.
-- Adds and removes profiles from the UI.
+- Selects the highest weighted-engagement post published by each person in the last seven days.
+- Compares posting cadence and weighted engagement.
 - Exports a 90-day benchmark as CSV.
-- Ships with realistic demo data so the dashboard is usable before credentials are added.
 
 ## Run locally
 
@@ -37,7 +36,9 @@ Monid's catalog is dynamic. If either endpoint is no longer available, discover 
 
 The default profile lookup takes a LinkedIn profile URL and reads follower count. The default post lookup makes one bounded call per tracked profile and retains up to 15 recent posts from the last month.
 
-## Schedule daily snapshots
+At the current TikHub catalog prices, refreshing the fixed 14-profile watchlist costs about $0.23 per weekly run. Provider pricing can change, so check Monid before increasing the frequency.
+
+## Schedule the weekly run
 
 Set a strong `CRON_SECRET`, then have a scheduler call:
 
@@ -45,7 +46,7 @@ Set a strong `CRON_SECRET`, then have a scheduler call:
 curl -H "Authorization: Bearer $CRON_SECRET" https://your-app.example/api/cron/refresh
 ```
 
-Once per day is enough for audience-growth comparisons. The route replaces a same-day snapshot rather than creating duplicates.
+The Vercel schedule runs every Monday at 05:00 UTC. The route replaces a same-day snapshot rather than creating duplicates.
 
 ## Deploy on Vercel
 
@@ -58,7 +59,7 @@ Once per day is enough for audience-growth comparisons. The route replaces a sam
    - `APP_USERNAME` — the username for the dashboard, such as `admin`.
    - `APP_PASSWORD` — a strong, unique dashboard password.
 
-4. Deploy. `vercel.json` registers a production refresh every day at 05:00 UTC. Vercel automatically sends `CRON_SECRET` as a Bearer token to the protected cron route.
+4. Deploy. `vercel.json` registers a production refresh every Monday at 05:00 UTC. Vercel automatically sends `CRON_SECRET` as a Bearer token to the protected cron route.
 
 The tracker state is kept in the private Blob object `linkedin-comp-tracker/store.json`. Reads bypass the CDN cache and writes use ETags to avoid silently overwriting concurrent changes. The file is not publicly accessible.
 
@@ -72,7 +73,7 @@ npm run lint
 npm run build
 ```
 
-Demo output is synthetic. A successful build or demo refresh does not prove live LinkedIn data retrieval; that requires a funded Monid key and a hand-check of at least one returned profile and post.
+Unit-test output is synthetic. A successful build does not prove live LinkedIn data retrieval; that requires a funded Monid key and a hand-check of at least one returned profile and post.
 
 ## Responsible use
 

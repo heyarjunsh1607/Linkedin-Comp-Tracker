@@ -1,4 +1,5 @@
-import type { DashboardData, DashboardProfile, TrackerStore } from "@/lib/types";
+import type { DashboardData, DashboardProfile, ScoredPost, TrackerStore } from "@/lib/types";
+import { storageMode } from "@/lib/store";
 
 const DAY = 86_400_000;
 
@@ -11,6 +12,7 @@ function median(values: number[]) {
 
 export function buildDashboard(store: TrackerStore, range: number): DashboardData {
   const cutoff = Date.now() - range * DAY;
+  const weeklyCutoff = Date.now() - 7 * DAY;
   const profiles: DashboardProfile[] = store.profiles.map((profile) => {
     const allSnapshots = store.snapshots
       .filter((item) => item.profileId === profile.id)
@@ -45,15 +47,21 @@ export function buildDashboard(store: TrackerStore, range: number): DashboardDat
     });
 
   const profileMap = new Map(store.profiles.map((profile) => [profile.id, profile]));
-  const topPosts = store.posts
+  const scoredPosts: ScoredPost[] = store.posts
     .filter((post) => +new Date(post.publishedAt) >= cutoff && profileMap.has(post.profileId))
     .map((post) => ({
       ...post,
       author: profileMap.get(post.profileId)!,
       engagement: post.reactions + post.comments * 2 + post.reposts * 3,
     }))
-    .sort((a, b) => b.engagement - a.engagement)
-    .slice(0, 8);
+    .sort((a, b) => b.engagement - a.engagement);
+  const topPosts = scoredPosts.slice(0, 12);
+  const weeklyWinners = store.profiles.map((profile) => ({
+    profile,
+    post: scoredPosts.find(
+      (post) => post.profileId === profile.id && +new Date(post.publishedAt) >= weeklyCutoff,
+    ),
+  }));
   const self = profiles.find((profile) => profile.isSelf);
   const peers = profiles.filter((profile) => !profile.isSelf);
   const refreshed = store.profiles.map((profile) => profile.lastRefreshedAt).filter(Boolean).sort().at(-1);
@@ -63,9 +71,11 @@ export function buildDashboard(store: TrackerStore, range: number): DashboardDat
     generatedAt: new Date().toISOString(),
     isDemo: store.seededDemo,
     hasMonidKey: Boolean(process.env.MONID_API_KEY),
+    storageMode: storageMode(),
     lastRefreshedAt: refreshed,
     profiles,
     topPosts,
+    weeklyWinners,
     summary: {
       selfGrowth: self?.growth || 0,
       selfGrowthPercent: self?.growthPercent || 0,
@@ -73,6 +83,7 @@ export function buildDashboard(store: TrackerStore, range: number): DashboardDat
       selfPosts: self?.postsInRange || 0,
       selfRank: self?.rank || 0,
       totalProfiles: profiles.length,
+      weeklyWinnerCount: weeklyWinners.filter((winner) => winner.post).length,
     },
   };
 }

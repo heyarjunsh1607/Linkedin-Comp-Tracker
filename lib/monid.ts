@@ -148,6 +148,17 @@ function postProfileId(record: Record<string, unknown>, profiles: Profile[], fal
   return profiles.find((profile) => profile.name.toLowerCase() === name)?.id || fallbackProfileId;
 }
 
+function isAuthoredBy(record: Record<string, unknown>, profile: Profile) {
+  const directUrl = text(record, ["poster_linkedin_url", "authorProfileUrl", "authorLinkedInUrl", "profileUrl", "linkedinUrl"]);
+  const nested = record.author || record.poster;
+  const nestedUrl = nested && typeof nested === "object"
+    ? text(nested as Record<string, unknown>, ["linkedin_url", "linkedinUrl", "profileUrl", "url"])
+    : "";
+  const authorSlug = (directUrl || nestedUrl).match(/linkedin\.com\/in\/([^/?#]+)/i)?.[1]?.toLowerCase();
+  const profileSlug = profile.linkedinUrl.match(/linkedin\.com\/in\/([^/?#]+)/i)?.[1]?.toLowerCase();
+  return !authorSlug || !profileSlug || authorSlug === profileSlug;
+}
+
 function publishedAt(record: Record<string, unknown>, fallback: string) {
   const value = text(record, ["posted", "posted_at", "postedAtISO", "publishedAt", "createdAt", "date"], fallback);
   const normalized = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(value)
@@ -168,6 +179,7 @@ export async function fetchPosts(profiles: Profile[]): Promise<LinkedInPost[]> {
       queryParams: { url: profile.linkedinUrl, type: "posts", start: 0 },
     });
     const normalized = outputItems(output).flatMap((record, index) => {
+      if (record.reshared === true || !isAuthoredBy(record, profile)) return [];
       const profileId = postProfileId(record, profiles, profile.id) || profile.id;
       const engagement = record.engagement && typeof record.engagement === "object"
         ? (record.engagement as Record<string, unknown>)

@@ -1,7 +1,7 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { BlobPreconditionFailedError, get, put } from "@vercel/blob";
-import { createDemoStore } from "@/lib/demo";
+import { createStarterStore, mergeWatchlist } from "@/lib/watchlist";
 import type { LinkedInPost, Profile, Snapshot, TrackerStore } from "@/lib/types";
 
 const BLOB_PATH = "linkedin-comp-tracker/store.json";
@@ -14,12 +14,17 @@ function usesBlobStore() {
   return Boolean(process.env.BLOB_READ_WRITE_TOKEN);
 }
 
+export function storageMode(): "blob" | "local" | "unconfigured" {
+  if (usesBlobStore()) return "blob";
+  return process.env.VERCEL ? "unconfigured" : "local";
+}
+
 async function ensureLocalStore(): Promise<TrackerStore> {
   try {
-    return JSON.parse(await fs.readFile(/* turbopackIgnore: true */ DATA_FILE, "utf8")) as TrackerStore;
+    return mergeWatchlist(JSON.parse(await fs.readFile(/* turbopackIgnore: true */ DATA_FILE, "utf8")) as TrackerStore);
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-    const store = createDemoStore();
+    const store = createStarterStore();
     await fs.mkdir(path.dirname(DATA_FILE), { recursive: true });
     await fs.writeFile(DATA_FILE, JSON.stringify(store, null, 2));
     return store;
@@ -28,13 +33,14 @@ async function ensureLocalStore(): Promise<TrackerStore> {
 
 async function readBlobStore(): Promise<{ store: TrackerStore; etag?: string }> {
   const result = await get(BLOB_PATH, { access: "private", useCache: false });
-  if (!result || result.statusCode !== 200) return { store: createDemoStore() };
+  if (!result || result.statusCode !== 200) return { store: createStarterStore() };
   const contents = await new Response(result.stream).text();
-  return { store: JSON.parse(contents) as TrackerStore, etag: result.blob.etag };
+  return { store: mergeWatchlist(JSON.parse(contents) as TrackerStore), etag: result.blob.etag };
 }
 
 export async function readStore(): Promise<TrackerStore> {
   if (usesBlobStore()) return (await readBlobStore()).store;
+  if (storageMode() === "unconfigured") return createStarterStore();
   return ensureLocalStore();
 }
 
@@ -61,6 +67,10 @@ export async function updateStore(mutator: (store: TrackerStore) => TrackerStore
         }
       }
       return;
+    }
+
+    if (storageMode() === "unconfigured") {
+      throw new Error("Connect a Private Vercel Blob store before saving or refreshing data.");
     }
 
     const store = await ensureLocalStore();
@@ -97,30 +107,44 @@ export async function removeProfile(id: string) {
 
 type RefreshResult = { profile: Profile; snapshot: Snapshot; posts: LinkedInPost[] };
 
+function postKey(post: LinkedInPost) {
+  return `${post.profileId}:${post.url === "#" ? post.id : post.url}`;
+}
+
+function mergePosts(store: TrackerStore, posts: LinkedInPost[]) {
+  const merged = new Map(store.posts.map((post) => [postKey(post), post]));
+  for (const post of posts) merged.set(postKey(post), post);
+  store.posts = [...merged.values()];
+}
+
 function applyRefresh(store: TrackerStore, { profile, snapshot, posts }: RefreshResult) {
-    const index = store.profiles.findIndex((item) => item.id === profile.id);
-    if (index >= 0) store.profiles[index] = profile;
-    const today = snapshot.capturedAt.slice(0, 10);
-    store.snapshots = store.snapshots.filter(
-      (item) => !(item.profileId === profile.id && item.capturedAt.slice(0, 10) === today),
-    );
-    store.snapshots.push(snapshot);
-    const incoming = new Map(posts.map((post) => [post.id, post]));
-    store.posts = [...new Map(
-      store.posts.map((post) => incoming.get(post.id) || post).map((post) => [post.id, post]),
-    ).values()];
-    const known = new Set(store.posts.map((post) => post.id));
-    for (const post of incoming.values()) {
-      if (!known.has(post.id)) {
-        store.posts.push(post);
-        known.add(post.id);
-      }
-    }
-    store.seededDemo = false;
+  const index = store.profiles.findIndex((item) => item.id === profile.id);
+  if (index >= 0) store.profiles[index] = profile;
+  const today = snapshot.capturedAt.slice(0, 10);
+  store.snapshots = store.snapshots.filter(
+    (item) => !(item.profileId === profile.id && item.capturedAt.slice(0, 10) === today),
+  );
+  store.snapshots.push(snapshot);
+  const recentCutoff = Date.now() - 31 * 86_400_000;
+  store.posts = store.posts.filter(
+    (post) => post.profileId !== profile.id || +new Date(post.publishedAt) < recentCutoff,
+  );
+  mergePosts(store, posts);
+  store.seededDemo = false;
 }
 
 export async function saveRefreshes(refreshes: RefreshResult[]) {
   return updateStore((store) => {
     refreshes.forEach((refresh) => applyRefresh(store, refresh));
+  });
+}
+
+export async function savePosts(profileId: string, posts: LinkedInPost[]) {
+  return updateStore((store) => {
+    const recentCutoff = Date.now() - 31 * 86_400_000;
+    store.posts = store.posts.filter(
+      (post) => post.profileId !== profileId || +new Date(post.publishedAt) < recentCutoff,
+    );
+    mergePosts(store, posts);
   });
 }

@@ -91,4 +91,31 @@ describe("Monid LinkedIn normalization", () => {
 
     await expect(fetchProfile(profile)).rejects.toThrow("ended with status BLOCKED");
   });
+
+  it("excludes another author's repost from a tracked profile's winners", async () => {
+    completed({ data: [{
+      urn: "repost-1",
+      post_url: "https://www.linkedin.com/feed/update/repost-1",
+      posted: "2026-08-13 08:00:02",
+      text: "Someone else's post",
+      poster_linkedin_url: "https://www.linkedin.com/in/someone-else",
+      num_reactions: 1000,
+    }] });
+
+    await expect(fetchPosts([profile])).resolves.toEqual([]);
+  });
+
+  it("excludes reshared activity even when the tracked profile is the poster", async () => {
+    completed({ data: [{
+      urn: "reshare-1",
+      post_url: "https://www.linkedin.com/feed/update/reshare-1",
+      posted: "2026-08-13 08:00:02",
+      text: "A reshared post",
+      poster_linkedin_url: profile.linkedinUrl,
+      reshared: true,
+      num_reactions: 1000,
+    }] });
+
+    await expect(fetchPosts([profile])).resolves.toEqual([]);
+  });
 });
