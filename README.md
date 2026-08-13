@@ -1,6 +1,6 @@
 # LinkedIn Watchlist MVP
 
-A small dashboard for saving one weekly winning post from each tracked LinkedIn profile and comparing audience growth and posting consistency. LinkedIn data is fetched through Monid; this app never needs your LinkedIn login or cookies.
+A local-only dashboard for saving one weekly winning post from each tracked LinkedIn profile and comparing audience growth and posting consistency. LinkedIn data is fetched through Monid; the app never needs your LinkedIn login or cookies.
 
 ## What it does
 
@@ -19,7 +19,7 @@ cp .env.example .env.local
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000).
+Add your Monid key to `.env.local`, then open [http://localhost:3000](http://localhost:3000). Click **Run weekly refresh** once a week. Results are stored in `data/linkedin-tracker.json` and remain on your computer.
 
 ## Connect Monid
 
@@ -38,32 +38,14 @@ The default profile lookup takes a LinkedIn profile URL and reads follower count
 
 At the current TikHub catalog prices, refreshing the fixed 14-profile watchlist costs about $0.23 per weekly run. Provider pricing can change, so check Monid before increasing the frequency.
 
-## Schedule the weekly run
+## Weekly routine
 
-Set a strong `CRON_SECRET`, then have a scheduler call:
+1. Run `npm run dev`.
+2. Open the dashboard.
+3. Click **Run weekly refresh**.
+4. Review each profile's winning post and the growth table.
 
-```bash
-curl -H "Authorization: Bearer $CRON_SECRET" https://your-app.example/api/cron/refresh
-```
-
-The Vercel schedule runs every Monday at 05:00 UTC. The route replaces a same-day snapshot rather than creating duplicates.
-
-## Deploy on Vercel
-
-1. Import this GitHub repository into Vercel.
-2. In the project's **Storage** tab, create a **Private Blob** store and connect it to all environments. Vercel adds `BLOB_READ_WRITE_TOKEN` automatically.
-3. Add these project environment variables:
-
-   - `MONID_API_KEY` — your Monid live key.
-   - `CRON_SECRET` — a random string of at least 16 characters.
-   - `APP_USERNAME` — the username for the dashboard, such as `admin`.
-   - `APP_PASSWORD` — a strong, unique dashboard password.
-
-4. Deploy. `vercel.json` registers a production refresh every Monday at 05:00 UTC. Vercel automatically sends `CRON_SECRET` as a Bearer token to the protected cron route.
-
-The tracker state is kept in the private Blob object `linkedin-comp-tracker/store.json`. Reads bypass the CDN cache and writes use ETags to avoid silently overwriting concurrent changes. The file is not publicly accessible.
-
-For local development, leave `BLOB_READ_WRITE_TOKEN` empty and the app uses `./data/linkedin-tracker.json`. `TRACKER_DATA_FILE` can point that local/self-hosted fallback at another persistent path.
+The refresh replaces a same-day snapshot instead of creating duplicates. `TRACKER_DATA_FILE` can point the local data file at another path if needed.
 
 ## Validation
 

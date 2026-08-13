@@ -1,5 +1,5 @@
 import { fetchPosts, fetchProfile } from "@/lib/monid";
-import { readStore, savePosts, saveRefreshes, storageMode } from "@/lib/store";
+import { readStore, savePosts, saveRefreshes } from "@/lib/store";
 
 type RefreshError = { profile: string; error: string };
 
@@ -20,10 +20,6 @@ export async function refreshTrackedProfiles(options: { cursor?: number; batchSi
   if (!process.env.MONID_API_KEY) {
     return { body: { error: "Add MONID_API_KEY to .env.local before running a live refresh." }, status: 503 };
   }
-  if (storageMode() === "unconfigured") {
-    return { body: { error: "Connect a Private Vercel Blob store before running the weekly refresh." }, status: 503 };
-  }
-
   const store = await readStore();
   if (!store.profiles.length) return { body: { error: "Add at least one profile first." }, status: 400 };
 

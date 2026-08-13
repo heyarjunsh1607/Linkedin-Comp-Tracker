@@ -1,23 +1,12 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import { BlobPreconditionFailedError, get, put } from "@vercel/blob";
 import { createStarterStore, mergeWatchlist } from "@/lib/watchlist";
 import type { LinkedInPost, Profile, Snapshot, TrackerStore } from "@/lib/types";
 
-const BLOB_PATH = "linkedin-comp-tracker/store.json";
 const DATA_FILE = process.env.TRACKER_DATA_FILE
   ? path.resolve(/* turbopackIgnore: true */ process.env.TRACKER_DATA_FILE)
   : path.join(process.cwd(), "data", "linkedin-tracker.json");
 let writeQueue = Promise.resolve();
-
-function usesBlobStore() {
-  return Boolean(process.env.BLOB_READ_WRITE_TOKEN);
-}
-
-export function storageMode(): "blob" | "local" | "unconfigured" {
-  if (usesBlobStore()) return "blob";
-  return process.env.VERCEL ? "unconfigured" : "local";
-}
 
 async function ensureLocalStore(): Promise<TrackerStore> {
   try {
@@ -31,48 +20,13 @@ async function ensureLocalStore(): Promise<TrackerStore> {
   }
 }
 
-async function readBlobStore(): Promise<{ store: TrackerStore; etag?: string }> {
-  const result = await get(BLOB_PATH, { access: "private", useCache: false });
-  if (!result || result.statusCode !== 200) return { store: createStarterStore() };
-  const contents = await new Response(result.stream).text();
-  return { store: mergeWatchlist(JSON.parse(contents) as TrackerStore), etag: result.blob.etag };
-}
-
 export async function readStore(): Promise<TrackerStore> {
-  if (usesBlobStore()) return (await readBlobStore()).store;
-  if (storageMode() === "unconfigured") return createStarterStore();
   return ensureLocalStore();
 }
 
 export async function updateStore(mutator: (store: TrackerStore) => TrackerStore | void) {
   let result!: TrackerStore;
   writeQueue = writeQueue.catch(() => undefined).then(async () => {
-    if (usesBlobStore()) {
-      for (let attempt = 0; attempt < 4; attempt += 1) {
-        const current = await readBlobStore();
-        const draft = structuredClone(current.store);
-        const next = mutator(draft) || draft;
-        try {
-          await put(BLOB_PATH, JSON.stringify(next), {
-            access: "private",
-            allowOverwrite: Boolean(current.etag),
-            cacheControlMaxAge: 60,
-            contentType: "application/json",
-            ifMatch: current.etag,
-          });
-          result = next;
-          return;
-        } catch (error) {
-          if (attempt === 3 || (current.etag && !(error instanceof BlobPreconditionFailedError))) throw error;
-        }
-      }
-      return;
-    }
-
-    if (storageMode() === "unconfigured") {
-      throw new Error("Connect a Private Vercel Blob store before saving or refreshing data.");
-    }
-
     const store = await ensureLocalStore();
     const draft = structuredClone(store);
     result = mutator(draft) || draft;

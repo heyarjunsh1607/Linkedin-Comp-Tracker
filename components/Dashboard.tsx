@@ -104,7 +104,7 @@ export function Dashboard() {
         <a className="mvp-brand" href="#top"><span>in</span>LinkedIn Watchlist</a>
         <div className="header-actions">
           <a className="button secondary" href="/api/export"><Download size={16} />Export</a>
-          <button className="button primary" onClick={() => void refresh()} disabled={refreshing || loading || data?.storageMode === "unconfigured"}>
+          <button className="button primary" onClick={() => void refresh()} disabled={refreshing || loading}>
             {refreshing ? <LoaderCircle className="spin" size={16} /> : <RefreshCw size={16} />}
             {refreshing ? `Refreshing ${refreshProgress}/${data?.summary.totalProfiles || 14}…` : "Run weekly refresh"}
           </button>
@@ -120,16 +120,10 @@ export function Dashboard() {
           </div>
           <div className="connection-status">
             <span className={data?.hasMonidKey ? "ready" : "missing"}>{data?.hasMonidKey ? "Monid connected" : "Monid key missing"}</span>
-            <small>{data?.storageMode === "blob" ? "Vercel Blob connected" : data?.storageMode === "local" ? "Local file storage" : "Vercel Blob required"}</small>
+            <small>Saved to your local data file</small>
           </div>
         </section>
 
-        {data?.storageMode === "unconfigured" && (
-          <div className="setup-alert">
-            <strong>Connect a Private Vercel Blob store.</strong>
-            <span>The watchlist can load without it, but weekly results cannot be saved on Vercel.</span>
-          </div>
-        )}
         {message && <div className={`message ${message.tone}`}>{message.text}</div>}
 
         {loading && !data ? (
@@ -196,7 +190,7 @@ export function Dashboard() {
               </div>
             </section>
 
-            <p className="mvp-note">Automatic refresh: every Monday at 05:00 UTC. The first run creates the baseline; useful growth comparisons appear after later weekly runs.</p>
+            <p className="mvp-note">Open the app once a week and click Run weekly refresh. The first run creates the baseline; useful growth comparisons appear after later weekly runs.</p>
           </>
         )}
       </div>

@@ -9,15 +9,12 @@ let testDirectory = "";
 beforeEach(async () => {
   testDirectory = await mkdtemp(path.join(os.tmpdir(), "linkedin-tracker-store-"));
   process.env.TRACKER_DATA_FILE = path.join(testDirectory, "store.json");
-  delete process.env.BLOB_READ_WRITE_TOKEN;
-  delete process.env.VERCEL;
   vi.resetModules();
 });
 
 afterEach(async () => {
   await rm(testDirectory, { recursive: true, force: true });
   delete process.env.TRACKER_DATA_FILE;
-  delete process.env.VERCEL;
   vi.resetModules();
 });
 
@@ -58,14 +55,5 @@ describe("tracker store", () => {
     expect(removed.profiles).toHaveLength(14);
     expect(removed.snapshots).toEqual([]);
     expect(removed.posts).toEqual([]);
-  });
-
-  it("does not try to write to Vercel's read-only filesystem without Blob", async () => {
-    process.env.VERCEL = "1";
-    vi.resetModules();
-    const { readStore, updateStore } = await import("@/lib/store");
-
-    expect((await readStore()).profiles).toHaveLength(14);
-    await expect(updateStore(() => undefined)).rejects.toThrow("Connect a Private Vercel Blob store");
   });
 });

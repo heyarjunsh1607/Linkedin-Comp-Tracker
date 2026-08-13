@@ -1,5 +1,4 @@
 import type { DashboardData, DashboardProfile, ScoredPost, TrackerStore } from "@/lib/types";
-import { storageMode } from "@/lib/store";
 
 const DAY = 86_400_000;
 
@@ -71,7 +70,6 @@ export function buildDashboard(store: TrackerStore, range: number): DashboardDat
     generatedAt: new Date().toISOString(),
     isDemo: store.seededDemo,
     hasMonidKey: Boolean(process.env.MONID_API_KEY),
-    storageMode: storageMode(),
     lastRefreshedAt: refreshed,
     profiles,
     topPosts,

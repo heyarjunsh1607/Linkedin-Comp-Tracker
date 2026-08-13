@@ -54,7 +54,6 @@ export type DashboardData = {
   generatedAt: string;
   isDemo: boolean;
   hasMonidKey: boolean;
-  storageMode: "blob" | "local" | "unconfigured";
   lastRefreshedAt?: string;
   profiles: DashboardProfile[];
   topPosts: ScoredPost[];

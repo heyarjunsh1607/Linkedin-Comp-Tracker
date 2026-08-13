@@ -7,7 +7,6 @@ const mocks = vi.hoisted(() => ({
   readStore: vi.fn(),
   saveRefreshes: vi.fn(),
   savePosts: vi.fn(),
-  storageMode: vi.fn(),
 }));
 
 vi.mock("@/lib/monid", () => ({
@@ -19,7 +18,6 @@ vi.mock("@/lib/store", () => ({
   readStore: mocks.readStore,
   saveRefreshes: mocks.saveRefreshes,
   savePosts: mocks.savePosts,
-  storageMode: mocks.storageMode,
 }));
 
 import { refreshTrackedProfiles } from "@/lib/refresh";
@@ -54,7 +52,6 @@ function post(profileId: string): LinkedInPost {
 beforeEach(() => {
   vi.clearAllMocks();
   process.env.MONID_API_KEY = "monid_live_test";
-  mocks.storageMode.mockReturnValue("local");
   mocks.saveRefreshes.mockResolvedValue(undefined);
   mocks.savePosts.mockResolvedValue(undefined);
 });
